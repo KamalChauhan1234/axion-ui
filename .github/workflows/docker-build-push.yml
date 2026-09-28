@@ -1,38 +1,60 @@
-name: axion-ui-ci
+name: Axion UI CI
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches:
+      - main
 
 permissions:
-  id-token: write   # OIDC ke liye zaroori
-  contents: read
+  contents: write
+
+env:
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: ${{ vars.IMAGE_NAME }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    env:
-      IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/${{ vars.IMAGE_NAME }}
+
     steps:
-      - name: Checkout
+
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure login (OIDC)
+      - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: ACR login
-        run: az acr login --name ${{ vars.ACR_NAME }}
-
-      - name: Docker build
+      - name: Login to ACR
         run: |
-          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+          az acr login --name ${{ vars.ACR_LOGIN_SERVER }}
 
-      - name: Docker push
+      - name: Set image tag
         run: |
-          docker push $IMAGE:${{ github.sha }}
-          docker push $IMAGE:latest
+          echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG
+
+      - name: Update Kubernetes manifest
+        run: |
+          sed -i "s|image: .*|image: $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG|g" manifest/deployment-ui.yaml
+
+      - name: Commit manifest change
+        run: |
+          git config user.name "KamalChauhan1234"
+          git config user.email "kamalchauhan0037@gmail.com"
+
+          git add manifest/deployment-ui.yaml
+
+          git commit -m "Update axion-ui image to $IMAGE_TAG" || echo "No changes"
+
+          git push

@@ -13,6 +13,6 @@ spec:
     spec:
       containers:
       - name: axion-ui
-        image: acrdevtodoacr.azurecr.io/axion-ui:v4
+        image: acrdevtodoacr.azurecr.io/axionuidev
         ports:
         - containerPort: 80

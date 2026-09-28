@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: axion-service
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: axion-ui
   ports:
