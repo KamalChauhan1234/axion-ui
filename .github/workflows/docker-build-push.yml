@@ -1,68 +1,38 @@
-name: Axion UI CI
+name: Trigger auto deployment for axion-ui-test
 
 on:
   push:
-    branches:
-      - main
-
-      
-
-permissions:
-  contents: write
-  id-token: write
-
-
-env:
-  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
-  IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build-and-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-
-      - name: Checkout code
+      - name: Checkout to the branch
         uses: actions/checkout@v4
 
       - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AXIONUITEST_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AXIONUITEST_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AXIONUITEST_AZURE_SUBSCRIPTION_ID }}
 
-      - name: Login to ACR
-        run: |
-          az acr login --name ${{ vars.ACR_LOGIN_SERVER }}
-
-      - name: Set image tag
-        run: |
-          echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
-
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG \
-            .
-
-            
-
-      - name: Push Docker image
-        run: |
-          docker push $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG
-
-      - name: Update Kubernetes manifest
-        run: |
-          sed -i "s|image: .*|image: $ACR_LOGIN_SERVER/$IMAGE_NAME:$IMAGE_TAG|g" manifest/deployment-ui.yaml
-
-      - name: Commit manifest change
-        run: |
-          git config user.name "KamalChauhan1234"
-          git config user.email "kamalchauhan0037@gmail.com"
-
-          git add manifest/deployment-ui.yaml
-
-          git commit -m "Update axion-ui image to $IMAGE_TAG" || echo "No changes"
-
-          git push
+      - name: Build and push container image to registry
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          dockerfilePath: Dockerfile
+          registryUrl: axionuiacr123.azurecr.io
+          registryUsername: ${{ secrets.ACR_USERNAME }}
+          registryPassword: ${{ secrets.ACR_PASSWORD }}
+          containerAppName: axion-ui-test
+          resourceGroup: rg-test
+          imageToBuild: axionuiacr123.azurecr.io/axion-ui:${{ github.sha }}
+          targetPort: 80
+          ingress: external
